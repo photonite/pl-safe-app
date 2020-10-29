@@ -24,7 +24,7 @@ ReactDOM.render(
         <Route path="/walletConnect">
           <WalletConnect />
         </Route>
-        <Route path="/poolTogether">
+        <Route path="/pooltogether">
           <PoolTogether />
         </Route>
         <Route
@@ -42,7 +42,7 @@ ReactDOM.render(
                   <Link to="/walletConnect">Wallet Connect</Link>
                 </div>
                 <div>
-                  <Link to="/poolTogether">PoolTogether</Link>
+                  <Link to="/pooltogether">PoolTogether</Link>
                 </div>
               </>
             )

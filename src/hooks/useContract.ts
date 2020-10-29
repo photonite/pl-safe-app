@@ -1,33 +1,39 @@
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useConnection } from "../web3/ConnectionContext"
 import ethers from 'ethers'
+import useAsyncMemo from "./useAsyncMemo"
 
-const getContact = ((networkId: any, address: string, abi: any) => {
+const getContact = ((provider: any, networkId: any, address: string, abi: any, signerAddress: string) => {
   if (networkId && address && abi) {
+    if (signerAddress) {
+      const signer: any = provider.getSigner()
+      return new ethers.Contract(address, abi, ethers.getDefaultProvider(networkId)).connect(signer)
+    }
     return new ethers.Contract(address, abi, ethers.getDefaultProvider(networkId))
   }
   return null
 })
 
 const useContract = (addressRetriever: string | Function, abi: any) => {
-  const { networkId } = useConnection()
-  const [contract, setContract] = useState<any>()
+  const { networkId, safeInfo, provider, contracts, setContracts } = useConnection()
+  
+  const address = useAsyncMemo<string>(async () => {
+    if (typeof addressRetriever === 'string') {
+      return addressRetriever
+    } else if (addressRetriever instanceof Function) {
+      return await addressRetriever()
+    }
+    return ''
+  }, '', [addressRetriever])
 
   useEffect(() => {
-    if (contract) return
-    if (typeof addressRetriever === 'string') {
-      setContract(getContact(networkId, addressRetriever, abi))
-    } else if (addressRetriever instanceof Function) {
-      addressRetriever().then((address: string) => {
-        if (address) {
-          setContract(getContact(networkId, address, abi))
-        }
-      })
+    if (address && !contracts?.[address] && provider && abi && safeInfo.safeAddress) {
+      setContracts((contracts: any) => ({...contracts, [address]: getContact(provider, networkId, address, abi, safeInfo.safeAddress)}))
     }
-  }, [addressRetriever, abi, networkId, contract])
+  }, [abi, networkId, safeInfo.safeAddress, provider, address, setContracts, addressRetriever, contracts])
 
 
-  return contract
+  return contracts?.[address]
 } 
 
 export default useContract

@@ -3,7 +3,7 @@ import usdcIcon from "./images/asset_USDC.svg";
 import usdtIcon from "./images/asset_USDT.svg";
 import tokens, { Token} from "./tokens";
 import { contractAddresses } from '@pooltogether/current-pool-data'
-import Big from 'big.js'
+import Big, { BigSource } from 'big.js'
 
 const w: any = window
 
@@ -47,7 +47,7 @@ export const getTokenList = async (connection: any): Promise<Array<TokenItem>> =
     return []
   }
 
-  const networkId: 1 | 4 = await connection.eth.net.getId()
+  const networkId: 1 | 4 = await connection?.eth.net.getId()
 
   const tokensByNetwork = tokens[networkId];
 
@@ -66,10 +66,10 @@ export const getTokenList = async (connection: any): Promise<Array<TokenItem>> =
     }))
 };
 
-export const formatBigNumber = (number: string, tokenItem?: {decimals: number}, precision = 2): string => {
+export const formatBigNumber = (number: BigSource, tokenItem?: {decimals: number}, precision = 2): string => {
   if (!tokenItem) {
     return ''
   }
 
-  return new Big(number).div(10 ** tokenItem.decimals).toFixed(2)
+  return new Big(number).div(10 ** tokenItem.decimals).toFixed(precision)
 }

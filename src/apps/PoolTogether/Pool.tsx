@@ -1,76 +1,147 @@
-import React from "react"
-import ListItem from "@material-ui/core/ListItem"
-import ListItemIcon from "@material-ui/core/ListItemIcon"
-import ListItemText from "@material-ui/core/ListItemText"
+import React, { useState } from "react"
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  IconButton,
+  Input,
+} from "@material-ui/core"
+import { ArrowRight, ChevronLeft } from "@material-ui/icons"
 import { TokenItem } from "./config"
 import useContract from "../../hooks/useContract"
-import PrizePoolAbi from "./abis/PrizePool"
-import Big from "big.js"
-import SingleRandomWinnerAbi from "./abis/SingleRandomWinner"
-import CErc20 from "./abis/CErc20"
 import useAsyncMemo from "../../hooks/useAsyncMemo"
-const SECONDS_PER_BLOCK = 14
+import { useConnection } from "../../web3/ConnectionContext"
+import PrizePoolAbi from "./abis/PrizePool"
+import SingleRandomWinnerAbi from "./abis/SingleRandomWinner"
+import TicketAbi from "./abis/Ticket"
+import Big from "big.js"
+import CErc20 from "./abis/CErc20"
+import { ethers } from "ethers"
+import useResponse from "../../hooks/useResponse"
 
-const Pool = ({ token }: { token: TokenItem }) => {
+const Pool = ({
+  token,
+  onClose,
+}: {
+  token: TokenItem
+  onClose: (event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => void
+}) => {
+  const { safeInfo, appsSdk } = useConnection()
+  console.log({ safeInfo })
+  const tokenContract = useContract(token.tokenAddr, CErc20)
   const poolContract: any = useContract(token.poolAddr, PrizePoolAbi)
-
   const strategyContract: any = useContract(
     async () => poolContract?.prizeStrategy(),
     SingleRandomWinnerAbi
   )
 
-  const cTokenContract: any = useContract(
-    async () => poolContract?.cToken(),
-    CErc20
+  const ticketAddress = useAsyncMemo(
+    async () => strategyContract?.ticket(),
+    "",
+    [strategyContract]
   )
+  const ticketContract: any = useContract(ticketAddress, TicketAbi)
 
-  const prize = useAsyncMemo(
+  const controlledTokens = useAsyncMemo(
     async () => {
-      if (poolContract && strategyContract && cTokenContract) {
-        const [
-          supplyRateByBlock,
-          awardBalance,
-          balance,
-          periodEndAt,
-        ] = await Promise.all([
-          cTokenContract.supplyRatePerBlock(),
-          poolContract.callStatic.captureAwardBalance(),
-          poolContract.callStatic.balance(),
-          strategyContract?.prizePeriodEndAt(),
-        ])
+      const tokens = poolContract?.tokens()
 
-        const numberOfBlocks = new Big(periodEndAt)
-          .minus(Date.now() / 1000)
-          .div(SECONDS_PER_BLOCK)
-
-        const scaledBalance = new Big(balance).div(10 ** token.decimals)
-        const scaledAwardBalance = new Big(awardBalance).div(
-          10 ** token.decimals
-        )
-        const scaledSupplyRatePerBlock = new Big(supplyRateByBlock).div(
-          10 ** 18
-        )
-
-        const prize = scaledBalance
-          .times(numberOfBlocks)
-          .times(scaledSupplyRatePerBlock)
-          .plus(scaledAwardBalance)
-
-        return prize.toFixed(2)
-      }
-      return "-"
+      console.log({ poolContract, tokens })
+      return tokens
     },
-    "-",
-    [poolContract, strategyContract, cTokenContract, token.decimals]
+    [],
+    [poolContract]
   )
+
+  const [balance, reloadBalance] = useResponse(
+    async () => {
+      if (ticketContract) {
+        return await ticketContract.balanceOf(safeInfo.safeAddress)
+      }
+    },
+    "0",
+    [ticketContract, safeInfo.safeAddress]
+  )
+
+  const [inputAmount, setInputAmount] = useState<string>("0")
+
+  const handleBuyTickets = async () => {
+    const amount = ethers.utils.parseEther(inputAmount)
+    const allowance = await tokenContract.allowance(
+      safeInfo.safeAddress,
+      poolContract.address
+    )
+
+    const txs = []
+
+    if (!allowance.gt(amount)) {
+      txs.push({
+        to: tokenContract.address,
+        value: 0,
+        data: tokenContract.interface.encodeFunctionData("approve", [
+          poolContract.address,
+          amount,
+        ]),
+      })
+    }
+
+    txs.push({
+      to: poolContract.address,
+      value: 0,
+      data: poolContract.interface.encodeFunctionData("depositTo", [
+        safeInfo.safeAddress,
+        amount,
+        ticketContract.address,
+        ethers.constants.AddressZero,
+      ]),
+    })
+
+    await appsSdk.sendTransactions(txs)
+    reloadBalance()
+  }
+
+  console.log({
+    inputAmount,
+    token,
+    controlledTokens,
+    ticketAddress,
+    balance,
+    balancetos: balance?.toString(),
+  })
 
   return (
-    <ListItem button component="ul">
-      <ListItemIcon>
-        <img src={token?.iconUrl} alt={token?.label} height="36" />
-      </ListItemIcon>
-      <ListItemText primary={`${prize} DAI`} />
-    </ListItem>
+    <Card>
+      <CardHeader
+        title={`PoolTogether ${token.id.toLocaleUpperCase()}`}
+        avatar={
+          <IconButton onClick={onClose}>
+            <ChevronLeft />
+          </IconButton>
+        }
+      />
+      <CardContent>
+        <div>
+          Your balance:{" "}
+          {!!balance &&
+            new Big(balance?.toString())
+              .div(`1e${token.decimals}`)
+              .toFixed(2)}{" "}
+          Tokens
+        </div>
+        <div>
+          <Input
+            value={inputAmount}
+            onChange={(e) => setInputAmount(e.target.value)}
+          />
+        </div>
+        <div>
+          <Button startIcon={<ArrowRight />} onClick={handleBuyTickets}>
+            Buy Tickets
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
