@@ -1,13 +1,14 @@
-import React from "react";
-import ReactDOM from "react-dom";
-import { BrowserRouter as Router, Switch, Route, Link } from "react-router-dom";
+import React from "react"
+import ReactDOM from "react-dom"
+import { BrowserRouter as Router, Switch, Route, Link } from "react-router-dom"
 
-import Compound from "./apps/Compound";
-import WalletConnect from "./apps/WalletConnect";
-import TxBuilder from "./apps/TxBuilder";
-import GlobalStyles from "./global";
+import Compound from "./apps/Compound"
+import WalletConnect from "./apps/WalletConnect"
+import TxBuilder from "./apps/TxBuilder"
+import PoolTogether from "./apps/PoolTogether"
+import GlobalStyles from "./global"
 
-import * as serviceWorker from "./serviceWorker";
+import * as serviceWorker from "./serviceWorker"
 
 ReactDOM.render(
   <>
@@ -16,12 +17,15 @@ ReactDOM.render(
       <Switch>
         <Route path="/compound">
           <Compound />
-        </Route>        
+        </Route>
         <Route path="/tx-builder">
           <TxBuilder />
         </Route>
         <Route path="/walletConnect">
           <WalletConnect />
+        </Route>
+        <Route path="/pooltogether">
+          <PoolTogether />
         </Route>
         <Route
           path="/"
@@ -37,17 +41,20 @@ ReactDOM.render(
                 <div>
                   <Link to="/walletConnect">Wallet Connect</Link>
                 </div>
+                <div>
+                  <Link to="/pooltogether">PoolTogether</Link>
+                </div>
               </>
-            );
+            )
           }}
         />
       </Switch>
     </Router>
   </>,
   document.getElementById("root")
-);
+)
 
 // If you want your app to work offline and load faster, you can change
 // unregister() to register() below. Note this comes with some pitfalls.
 // Learn more about service workers: https://bit.ly/CRA-PWA
-serviceWorker.unregister();
+serviceWorker.unregister()

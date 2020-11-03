@@ -1,0 +1,12 @@
+query PrizePool($id: String!) {
+  prizePool(id: $id) {
+    id
+    prizeStrategy {
+      id
+      singleRandomWinner {
+        id
+        prizePeriodEndAt
+      }
+    }
+  }
+}
