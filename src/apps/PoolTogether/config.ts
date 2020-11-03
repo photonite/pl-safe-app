@@ -5,11 +5,9 @@ import tokens, { Token} from "./tokens";
 import { contractAddresses } from '@pooltogether/current-pool-data'
 import Big, { BigSource } from 'big.js'
 
-const w: any = window
-
 export type AVAILABLE_TOKENS = 'dai' | 'usdc' | 'usdt'
 
-export const web3Provider = process.env.REACT_APP_WEB3_PROVIDER_URL || w.ethereum;
+export const web3Provider = 'https://rinkeby.infura.io/v3/c6b741d4895e44b9918bb1c4ea0b8c0a';
 
 export type TokenItem = {
   id: string;

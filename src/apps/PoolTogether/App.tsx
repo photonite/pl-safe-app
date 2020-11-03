@@ -1,39 +1,109 @@
 import React, { useEffect, useState } from "react"
-import { getTokenList, TokenItem } from "./config"
+import { formatBigNumber, getTokenList, TokenItem } from "./config"
 import WidgetWrapper from "../../components/WidgetWrapper"
-import { Title, Section } from "@gnosis.pm/safe-react-components"
-import { List } from "@material-ui/core"
-import PoolListItem from "./PoolListItem"
+import { Title, Section, Text, Select } from "@gnosis.pm/safe-react-components"
 import { useConnection } from "../../web3/ConnectionContext"
 import Pool from "./Pool"
+import CErc20 from "./abis/CErc20"
+import PrizePool from "./abis/PrizePool"
+import SingleRandomWinner from "./abis/SingleRandomWinner"
+import useAsyncMemo from "../../hooks/useAsyncMemo"
+import styled from "styled-components"
+
+const SelectContainer = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: left;
+
+  margin-bottom: 15px;
+
+  *:first-child {
+    margin-right: 5px;
+  }
+`
 
 const PoolTogetherWidget = () => {
-  const { connection } = useConnection()
+  const {
+    connection,
+    getContract,
+    safeInfo,
+    provider,
+    networkId,
+  } = useConnection()
   const [tokens, setTokens] = useState<Array<TokenItem>>([])
   const [selectedToken, setSelectedToken] = useState<TokenItem | null>()
+  const [pools, setPools] = useState<Record<string, any>>({})
+
+  const tokenBalance = useAsyncMemo(
+    async () => {
+      if (safeInfo && selectedToken && pools[selectedToken.id]) {
+        return pools[selectedToken.id].tokenContract.balanceOf(
+          safeInfo.safeAddress
+        )
+      }
+      return "0.00"
+    },
+    "0.00",
+    [safeInfo, selectedToken, selectedToken && pools[selectedToken.id]]
+  )
 
   useEffect(() => {
     if (connection && !tokens.length) {
-      getTokenList(connection).then(setTokens)
+      getTokenList(connection).then((tokens: Array<TokenItem>) => {
+        setTokens(tokens)
+        setSelectedToken(tokens[0])
+      })
     }
-  }, [connection, tokens.length])
+  }, [connection, getContract, tokens.length])
+
+  useEffect(() => {
+    if (tokens.length && provider && networkId) {
+      setPools(
+        tokens.reduce(
+          (pools, token: TokenItem) => ({
+            ...pools,
+            [token.id]: {
+              tokenContract: getContract(token.tokenAddr, CErc20),
+              poolContract: getContract(token.poolAddr, PrizePool),
+              strategyContract: getContract(
+                token.strategyAddr,
+                SingleRandomWinner
+              ),
+            },
+          }),
+          {}
+        )
+      )
+    }
+  }, [getContract, networkId, provider, tokens])
+
+  const onSelectItem = (id: string) => {
+    if (!tokens.length) {
+      return
+    }
+    const selectedToken = tokens.find((t) => t.id === id)
+    if (!selectedToken) {
+      return
+    }
+    setSelectedToken(selectedToken)
+  }
 
   return (
     <WidgetWrapper>
       <Title size="xs">PoolTogether</Title>
       <Section>
-        {!selectedToken ? (
-          <List>
-            {tokens.map((token: TokenItem) => (
-              <PoolListItem
-                token={token}
-                key={token.id}
-                onClick={() => setSelectedToken(token)}
-              />
-            ))}
-          </List>
-        ) : (
-          <Pool token={selectedToken} onClose={() => setSelectedToken(null)} />
+        <SelectContainer>
+          <Select
+            items={tokens || []}
+            activeItemId={selectedToken?.id || ""}
+            onItemClick={onSelectItem}
+          />
+          <Text strong size="lg">
+            ~ {!!selectedToken && formatBigNumber(tokenBalance, selectedToken)}
+          </Text>
+        </SelectContainer>
+        {!!selectedToken && pools[selectedToken.id] && (
+          <Pool pool={pools[selectedToken.id]} token={selectedToken} />
         )}
       </Section>
     </WidgetWrapper>

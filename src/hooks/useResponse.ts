@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 
-export function useResponse<T>(
+function useResponse<T>(
   callback: () => Promise<T>,
   init: T,
   dependencies: any[] = [],
@@ -13,6 +13,7 @@ export function useResponse<T>(
   useEffect(() => {
     let isNotCancelled = true
 
+    setOutput(init)
     _callback()
       .then((payload) => {
         if (isNotCancelled) {
@@ -24,7 +25,7 @@ export function useResponse<T>(
     return () => {
       isNotCancelled = false
     }
-  }, [_callback, onError])
+  }, [_callback, init, onError])
 
   const refresh = useCallback(() => {
     _callback()

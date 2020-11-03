@@ -1,95 +1,105 @@
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import {
-  Button,
   Card,
   CardContent,
   CardHeader,
-  IconButton,
-  Input,
+  Grid,
+  Button as MuiButton,
 } from "@material-ui/core"
-import { ArrowRight, ChevronLeft } from "@material-ui/icons"
 import { TokenItem } from "./config"
-import useContract from "../../hooks/useContract"
 import useAsyncMemo from "../../hooks/useAsyncMemo"
 import { useConnection } from "../../web3/ConnectionContext"
-import PrizePoolAbi from "./abis/PrizePool"
-import SingleRandomWinnerAbi from "./abis/SingleRandomWinner"
 import TicketAbi from "./abis/Ticket"
-import Big from "big.js"
-import CErc20 from "./abis/CErc20"
-import { ethers } from "ethers"
+import CErc20Abi from "./abis/CErc20"
+import { BigNumber, ethers } from "ethers"
 import useResponse from "../../hooks/useResponse"
+import { Button, Text, TextField } from "@gnosis.pm/safe-react-components"
+import { estimatePrize } from "./utils"
+import BalanceText from "./BalanceText"
+import { BigNumberInput } from "big-number-input"
+import Big from "big.js"
+import useStyles from "./useStyles"
 
-const Pool = ({
-  token,
-  onClose,
-}: {
+export type PoolPropType = {
   token: TokenItem
-  onClose: (event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => void
-}) => {
-  const { safeInfo, appsSdk } = useConnection()
-  console.log({ safeInfo })
-  const tokenContract = useContract(token.tokenAddr, CErc20)
-  const poolContract: any = useContract(token.poolAddr, PrizePoolAbi)
-  const strategyContract: any = useContract(
-    async () => poolContract?.prizeStrategy(),
-    SingleRandomWinnerAbi
+  pool: any
+}
+
+const Pool = ({ token, pool }: PoolPropType) => {
+  const { safeInfo, appsSdk, getContract } = useConnection()
+
+  // Contracts
+  const ticketContract = useAsyncMemo(
+    async () =>
+      !!pool.strategyContract &&
+      getContract(await pool.strategyContract?.ticket(), TicketAbi),
+    null,
+    [pool.strategyContract]
   )
 
-  const ticketAddress = useAsyncMemo(
-    async () => strategyContract?.ticket(),
-    "",
-    [strategyContract]
-  )
-  const ticketContract: any = useContract(ticketAddress, TicketAbi)
-
-  const controlledTokens = useAsyncMemo(
-    async () => {
-      const tokens = poolContract?.tokens()
-
-      console.log({ poolContract, tokens })
-      return tokens
-    },
-    [],
-    [poolContract]
+  const cTokenContract = useAsyncMemo(
+    async () =>
+      !!pool.poolContract &&
+      getContract(await pool.poolContract?.cToken(), CErc20Abi),
+    null,
+    [pool.poolContract]
   )
 
   const [balance, reloadBalance] = useResponse(
-    async () => {
-      if (ticketContract) {
-        return await ticketContract.balanceOf(safeInfo.safeAddress)
-      }
-    },
-    "0",
+    async () =>
+      !!ticketContract &&
+      !!safeInfo &&
+      ticketContract?.balanceOf?.(safeInfo.safeAddress),
+    null,
     [ticketContract, safeInfo.safeAddress]
   )
 
-  const [inputAmount, setInputAmount] = useState<string>("0")
+  const [estimatedPrize] = useResponse(
+    async () => {
+      return estimatePrize(
+        token,
+        pool.poolContract,
+        pool.strategyContract,
+        cTokenContract
+      )
+    },
+    null,
+    [token, pool.poolContract, pool.strategyContract, cTokenContract]
+  )
+
+  const [inputAmount, setInputAmount] = useState<string>(
+    new Big(1).times(`1e${token.decimals}`).toString()
+  )
+
+  useEffect(() => {
+    setInputAmount(new Big(1).times(`1e${token.decimals}`).toString())
+  }, [token.decimals])
 
   const handleBuyTickets = async () => {
-    const amount = ethers.utils.parseEther(inputAmount)
-    const allowance = await tokenContract.allowance(
+    const amount = BigNumber.from(inputAmount || "0")
+
+    const allowance = await pool.tokenContract.allowance(
       safeInfo.safeAddress,
-      poolContract.address
+      pool.poolContract.address
     )
 
     const txs = []
 
     if (!allowance.gt(amount)) {
       txs.push({
-        to: tokenContract.address,
+        to: pool.tokenContract.address,
         value: 0,
-        data: tokenContract.interface.encodeFunctionData("approve", [
-          poolContract.address,
+        data: pool.tokenContract.interface.encodeFunctionData("approve", [
+          pool.poolContract.address,
           amount,
         ]),
       })
     }
 
     txs.push({
-      to: poolContract.address,
+      to: pool.poolContract.address,
       value: 0,
-      data: poolContract.interface.encodeFunctionData("depositTo", [
+      data: pool.poolContract.interface.encodeFunctionData("depositTo", [
         safeInfo.safeAddress,
         amount,
         ticketContract.address,
@@ -98,48 +108,81 @@ const Pool = ({
     })
 
     await appsSdk.sendTransactions(txs)
-    reloadBalance()
+    setInputAmount(new Big(1).times(`1e${token.decimals}`).toString())
+    await reloadBalance()
   }
 
-  console.log({
-    inputAmount,
-    token,
-    controlledTokens,
-    ticketAddress,
-    balance,
-    balancetos: balance?.toString(),
-  })
+  const insufficientBalance: boolean =
+    !balance || balance?.lt?.(inputAmount || "0")
+  const buyButtonEnabled =
+    !!pool.poolContract &&
+    !!pool.tokenContract &&
+    !!estimatedPrize &&
+    !!Number(inputAmount) &&
+    !insufficientBalance
+
+  const classes = useStyles()
 
   return (
     <Card>
-      <CardHeader
-        title={`PoolTogether ${token.id.toLocaleUpperCase()}`}
-        avatar={
-          <IconButton onClick={onClose}>
-            <ChevronLeft />
-          </IconButton>
-        }
-      />
+      <CardHeader title={`PoolTogether ${token.id.toLocaleUpperCase()}`} />
       <CardContent>
-        <div>
-          Your balance:{" "}
-          {!!balance &&
-            new Big(balance?.toString())
-              .div(`1e${token.decimals}`)
-              .toFixed(2)}{" "}
-          Tokens
-        </div>
-        <div>
-          <Input
-            value={inputAmount}
-            onChange={(e) => setInputAmount(e.target.value)}
+        <Grid className={classes.row}>
+          <Text size="xl">Estimated Prize</Text>
+          <BalanceText
+            amount={estimatedPrize}
+            unit={token.id.toLocaleUpperCase()}
+            loading={!estimatedPrize}
+            size="xl"
           />
-        </div>
-        <div>
-          <Button startIcon={<ArrowRight />} onClick={handleBuyTickets}>
+        </Grid>
+        <Grid className={classes.row}>
+          <Text size="xl">Your Balance </Text>
+          <BalanceText
+            size="xl"
+            decimals={token.decimals}
+            amount={balance}
+            unit={`${token.label} Tickets`}
+            loading={!balance}
+          />
+        </Grid>
+        <Grid className={classes.row}>
+          <BigNumberInput
+            decimals={token.decimals}
+            onChange={setInputAmount}
+            value={inputAmount}
+            renderInput={(props: any) => (
+              <TextField
+                label="Amount"
+                meta={{ error: insufficientBalance && "Insufficient balance" }}
+                {...props}
+                endAdornment={
+                  <MuiButton
+                    onClick={() => setInputAmount(balance.toString())}
+                    variant="text"
+                    disabled={!balance}
+                  >
+                    Max
+                  </MuiButton>
+                }
+              />
+            )}
+          />
+        </Grid>
+        <Grid className={classes.controls}>
+          <Button
+            size="lg"
+            onClick={handleBuyTickets}
+            disabled={!buyButtonEnabled}
+            variant="contained"
+            color="primary"
+          >
             Buy Tickets
           </Button>
-        </div>
+          <Button size="lg" disabled variant="contained" color="secondary">
+            Withdraw
+          </Button>
+        </Grid>
       </CardContent>
     </Card>
   )

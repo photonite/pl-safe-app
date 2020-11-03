@@ -3,10 +3,10 @@ import { useConnection } from "../web3/ConnectionContext"
 import ethers from 'ethers'
 import useAsyncMemo from "./useAsyncMemo"
 
-const getContact = ((provider: any, networkId: any, address: string, abi: any, signerAddress: string) => {
+const getContact = ((provider: any, networkId: any, address: string, abi: any) => {
   if (networkId && address && abi) {
-    if (signerAddress) {
-      const signer: any = provider.getSigner()
+    const signer: any = provider?.getSigner?.()
+    if (signer) {
       return new ethers.Contract(address, abi, ethers.getDefaultProvider(networkId)).connect(signer)
     }
     return new ethers.Contract(address, abi, ethers.getDefaultProvider(networkId))
@@ -16,7 +16,7 @@ const getContact = ((provider: any, networkId: any, address: string, abi: any, s
 
 const useContract = (addressRetriever: string | Function, abi: any) => {
   const { networkId, safeInfo, provider, contracts, setContracts } = useConnection()
-  
+
   const address = useAsyncMemo<string>(async () => {
     if (typeof addressRetriever === 'string') {
       return addressRetriever
@@ -28,7 +28,7 @@ const useContract = (addressRetriever: string | Function, abi: any) => {
 
   useEffect(() => {
     if (address && !contracts?.[address] && provider && abi && safeInfo.safeAddress) {
-      setContracts((contracts: any) => ({...contracts, [address]: getContact(provider, networkId, address, abi, safeInfo.safeAddress)}))
+      setContracts((contracts: any) => ({...contracts, [address]: getContact(provider, networkId, address, abi)}))
     }
   }, [abi, networkId, safeInfo.safeAddress, provider, address, setContracts, addressRetriever, contracts])
 

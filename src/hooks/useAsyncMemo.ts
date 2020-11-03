@@ -12,7 +12,7 @@ export function useAsyncMemo<T>(
 
   useEffect(() => {
     let isNotCancelled = true
-
+    setOutput(init)
     _callback.then(payload => {
       if (isNotCancelled) {
         setOutput(payload)
@@ -22,7 +22,7 @@ export function useAsyncMemo<T>(
     return () => {
       isNotCancelled = false
     }
-  }, [_callback])
+  }, [_callback, init])
 
   useEffect(() => {
     _callback.catch(onError)
